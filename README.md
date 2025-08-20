@@ -18,22 +18,132 @@ Backend do sistema Lokar, responsável por gerenciar imóveis, leads, usuários,
 ## 🏗 Estrutura do Projeto
 
 ```
-app/
-├── main.py           # Inicializacao do FastAPI
-├── models.py         # Modelos SQLAlchemy
-├── schemas.py        # Schemas Pydantic
-├── database.py       # Conexao com PostgreSQL
-├── routers/
-│   ├── auth.py       # Login / registro / JWT
-│   ├── users.py      # CRUD usuarios e permissoes
-│   ├── imoveis.py    # CRUD imoveis
-│   ├── leads.py      # Gestao de leads
-│   └── consent.py    # Registro e verificacao de consentimento LGPD
-└── utils/
-    ├── email.py      # Envio de e-mails e notificacoes
-    └── background.py # Tasks assincronas
+lokar_backend/
+├── main.py                   # Main geral, importa rotas de todos os serviços e inicializa o sistema
+├── services/                 # Cada serviço é autônomo e contém tudo que precisa
+│   ├── auth_service/
+│   │   ├── main.py           # Inicializa o serviço
+│   │   ├── models.py         # Models SQLAlchemy específicos do auth
+│   │   ├── schemas.py        # Schemas Pydantic
+│   │   └── routers/          # Routers modulares
+│   │       └── auth.py
+│   │
+│   ├── users_service/
+│   │   ├── main.py
+│   │   ├── models.py         # Usuários, roles
+│   │   ├── schemas.py
+│   │   └── routers/
+│   │       ├── users.py
+│   │       ├── roles.py
+│   │       └── profile.py
+│   │
+│   ├── imoveis_service/
+│   │   ├── main.py
+│   │   ├── models.py         # Imóveis, fotos
+│   │   ├── schemas.py
+│   │   └── routers/
+│   │       ├── imoveis.py
+│   │       └── fotos.py
+│   │
+│   ├── leads_service/
+│   │   ├── main.py
+│   │   ├── models.py         # Leads, interesses
+│   │   ├── schemas.py
+│   │   └── routers/
+│   │       ├── leads.py
+│   │       └── interesses.py
+│   │
+│   └── consent_service/
+│       ├── main.py
+│       ├── models.py         # Consentimentos LGPD
+│       ├── schemas.py
+│       └── routers/
+│           └── consent.py
+│
+├── gateway/                  # API Gateway ou main do portal
+│   ├── main.py               # Recebe requests externos, roteia para serviços
+│   ├── routers/
+│   │   ├── auth_gateway.py
+│   │   ├── users_gateway.py
+│   │   ├── imoveis_gateway.py
+│   │   ├── leads_gateway.py
+│   │   └── consent_gateway.py
+│   └── utils.py              # JWT central, autenticação, logging
+│
+├── commons/                  # Utils compartilhados entre serviços
+│   ├── email.py              # Envio de e-mails
+│   ├── background.py         # Tasks assíncronas
+│   ├── security.py           # Hashing, JWT, roles middleware
+│   └── helpers.py            # Funções utilitárias gerais
+│
+├── config/                   # Configurações gerais
+│   ├── settings.py           # Variáveis de ambiente
+│   └── logging_config.py     # Configuração de logs
+│
+├── logs/                     # Logs do sistema
+│   ├── logs_test.log
+│   └── system.log
+│
+├── tests/                    # Testes unitários e scripts isolados
+│   └── scripts.py
+│
+├── migrations/               # Alembic migrations para versionamento do banco
+│
+├── docker/                   # Dockerfiles e configs de cada serviço
+│
+├── requirements.txt
+└── README.md
+
 ```
 
+---
+## Diagrama de Arquitetura – Lokar Backend
+```css
+                        ┌───────────────────────┐
+                        │     Frontend React    │
+                        │  (Portal Lokar / App)│
+                        └─────────┬─────────────┘
+                                  │ HTTP Requests
+                                  │
+                                  ▼
+                        ┌───────────────────────┐
+                        │      API Gateway       │
+                        │   (gateway/main.py)   │
+                        │ - Autenticação JWT    │
+                        │ - Verificação LGPD    │
+                        │ - Logging central     │
+                        │ - CORS / Middlewares  │
+                        └─────┬─────┬─────┬─────┘
+                              │     │     │
+             ┌────────────────┘     │     └────────────────┐
+             ▼                      ▼                      ▼
+   ┌─────────────────┐      ┌─────────────────┐     ┌─────────────────┐
+   │ auth_service     │      │ users_service    │     │ imoveis_service │
+   │ - main.py        │      │ - main.py        │     │ - main.py       │
+   │ - models.py      │      │ - models.py      │     │ - models.py     │
+   │ - schemas.py     │      │ - schemas.py     │     │ - schemas.py    │
+   │ - routers/auth.py│      │ - routers/users/ │     │ - routers/      │
+   └─────────────────┘      └─────────────────┘     └─────────────────┘
+             │                      │                      │
+             ▼                      ▼                      ▼
+   ┌─────────────────┐      ┌─────────────────┐     ┌─────────────────┐
+   │ leads_service    │      │ consent_service  │     │ commons          │
+   │ - main.py        │      │ - main.py        │     │ - email.py       │
+   │ - models.py      │      │ - models.py      │     │ - background.py  │
+   │ - schemas.py     │      │ - schemas.py     │     │ - helpers.py     │
+   │ - routers/       │      │ - routers/       │     │ - security.py    │
+   └─────────────────┘      └─────────────────┘     └─────────────────┘
+             │                      │
+             └─────────┬────────────┘
+                       │
+                       ▼
+                ┌─────────────┐
+                │ PostgreSQL  │
+                │ (Cada serviço│
+                │ pode ter seu│
+                │  schema)    │
+                └─────────────┘
+```
 ---
 
 ## ⚡ Funcionalidades Principais
