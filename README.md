@@ -1,235 +1,134 @@
-# Lokar Backend (FastAPI)
+# Lokar Web
 
-Backend do sistema Lokar, responsável por gerenciar imóveis, leads, usuários, consentimento LGPD e integração com o portal público.
-
----
-
-## 🚀 Tecnologias
-
-* **Framework:** FastAPI
-* **Banco de dados:** PostgreSQL
-* **ORM:** SQLAlchemy
-* **Autenticação:** JWT + Roles Middleware (Admin / Corretor)
-* **Tarefas assíncronas:** Celery / FastAPI Background Tasks
-* **Envio de e-mail:** SendGrid / Mailgun / AWS SES
+Sistema de gestão imobiliária com suporte a CRM, leads, agendamento de visitas, controle de acessos, logs e sessões, construído em arquitetura de **microserviços** e banco de dados em modelo **Star Schema (Golden Layer)**.
 
 ---
 
-## 🏗 Estrutura do Projeto
-
-```
-lokar_backend/
-├── main.py                   # Main geral, importa rotas de todos os serviços e inicializa o sistema
-├── services/                 # Cada serviço é autônomo e contém tudo que precisa
-│   ├── auth_service/
-│   │   ├── main.py           # Inicializa o serviço
-│   │   ├── models.py         # Models SQLAlchemy específicos do auth
-│   │   ├── schemas.py        # Schemas Pydantic
-│   │   └── routers/          # Routers modulares
-│   │       └── auth.py
-│   │
-│   ├── users_service/
-│   │   ├── main.py
-│   │   ├── models.py         # Usuários, roles
-│   │   ├── schemas.py
-│   │   └── routers/
-│   │       ├── users.py
-│   │       ├── roles.py
-│   │       └── profile.py
-│   │
-│   ├── imoveis_service/
-│   │   ├── main.py
-│   │   ├── models.py         # Imóveis, fotos
-│   │   ├── schemas.py
-│   │   └── routers/
-│   │       ├── imoveis.py
-│   │       └── fotos.py
-│   │
-│   ├── leads_service/
-│   │   ├── main.py
-│   │   ├── models.py         # Leads, interesses
-│   │   ├── schemas.py
-│   │   └── routers/
-│   │       ├── leads.py
-│   │       └── interesses.py
-│   │
-│   └── consent_service/
-│       ├── main.py
-│       ├── models.py         # Consentimentos LGPD
-│       ├── schemas.py
-│       └── routers/
-│           └── consent.py
-│
-├── gateway/                  # API Gateway ou main do portal
-│   ├── main.py               # Recebe requests externos, roteia para serviços
-│   ├── routers/
-│   │   ├── auth_gateway.py
-│   │   ├── users_gateway.py
-│   │   ├── imoveis_gateway.py
-│   │   ├── leads_gateway.py
-│   │   └── consent_gateway.py
-│   └── utils.py              # JWT central, autenticação, logging
-│
-├── commons/                  # Utils compartilhados entre serviços
-│   ├── email.py              # Envio de e-mails
-│   ├── background.py         # Tasks assíncronas
-│   ├── security.py           # Hashing, JWT, roles middleware
-│   └── helpers.py            # Funções utilitárias gerais
-│
-├── config/                   # Configurações gerais
-│   ├── settings.py           # Variáveis de ambiente
-│   └── logging_config.py     # Configuração de logs
-│
-├── logs/                     # Logs do sistema
-│   ├── logs_test.log
-│   └── system.log
-│
-├── tests/                    # Testes unitários e scripts isolados
-│   └── scripts.py
-│
-├── migrations/               # Alembic migrations para versionamento do banco
-│
-├── docker/                   # Dockerfiles e configs de cada serviço
-│
-├── requirements.txt
-└── README.md
-
-```
-
----
-## Diagrama de Arquitetura – Lokar Backend
-```css
-                        ┌───────────────────────┐
-                        │     Frontend React    │
-                        │  (Portal Lokar / App)│
-                        └─────────┬─────────────┘
-                                  │ HTTP Requests
-                                  │
-                                  ▼
-                        ┌───────────────────────┐
-                        │      API Gateway       │
-                        │   (gateway/main.py)   │
-                        │ - Autenticação JWT    │
-                        │ - Verificação LGPD    │
-                        │ - Logging central     │
-                        │ - CORS / Middlewares  │
-                        └─────┬─────┬─────┬─────┘
-                              │     │     │
-             ┌────────────────┘     │     └────────────────┐
-             ▼                      ▼                      ▼
-   ┌─────────────────┐      ┌─────────────────┐     ┌─────────────────┐
-   │ auth_service     │      │ users_service    │     │ imoveis_service │
-   │ - main.py        │      │ - main.py        │     │ - main.py       │
-   │ - models.py      │      │ - models.py      │     │ - models.py     │
-   │ - schemas.py     │      │ - schemas.py     │     │ - schemas.py    │
-   │ - routers/auth.py│      │ - routers/users/ │     │ - routers/      │
-   └─────────────────┘      └─────────────────┘     └─────────────────┘
-             │                      │                      │
-             ▼                      ▼                      ▼
-   ┌─────────────────┐      ┌─────────────────┐     ┌─────────────────┐
-   │ leads_service    │      │ consent_service  │     │ commons          │
-   │ - main.py        │      │ - main.py        │     │ - email.py       │
-   │ - models.py      │      │ - models.py      │     │ - background.py  │
-   │ - schemas.py     │      │ - schemas.py     │     │ - helpers.py     │
-   │ - routers/       │      │ - routers/       │     │ - security.py    │
-   └─────────────────┘      └─────────────────┘     └─────────────────┘
-             │                      │
-             └─────────┬────────────┘
-                       │
-                       ▼
-                ┌─────────────┐
-                │ PostgreSQL  │
-                │ (Cada serviço│
-                │ pode ter seu│
-                │  schema)    │
-                └─────────────┘
-```
----
-
-## ⚡ Funcionalidades Principais
-
-* Cadastro e gerenciamento de **usuários** (Admin / Corretor)
-* Cadastro e publicação de **imóveis**
-* **Leads automáticos** do portal, com registro de interesse
-* **Consentimento LGPD** via e-mail/WhatsApp antes de liberar leads para o CRM
-* Dashboard interno para corretores e imobiliárias
-* Relatórios de leads, imóveis e consentimento
+## 🚀 Objetivo do Projeto
+O **Lokar Web** tem como propósito fornecer uma solução escalável e segura para gestão de imóveis e relacionamento com leads, integrando:
+- Cadastro e gerenciamento de imóveis.
+- CRM para controle de leads e funil de vendas.
+- Agendamento de visitas e acompanhamento de tarefas.
+- Controle de sessões para maior segurança de acessos.
+- Logs de auditoria para rastrear ações de usuários.
+- Dashboards e relatórios baseados em modelo **Data Warehouse (Star Schema)**.
 
 ---
 
-## 💻 Instalação
+## 📐 Arquitetura
+- **Backend:** Python (FastAPI/Django)
+- **Frontend:** React (futuro)
+- **Banco de Dados:** PostgreSQL (Docker)
+- **Modelo de Dados:** Star Schema (Dimensões e Fatos)
+- **Deploy:** Docker + Docker Compose
+- **Autenticação:** JWT + Refresh Tokens
+- **Estilo:** Microserviços independentes comunicando via API
 
-1. Clone o repositório:
+---
+
+## 📂 Estrutura de Pastas
 
 ```bash
-git clone https://github.com/seu-usuario/lokar-backend.git
-cd lokar-backend
+lokar-web/
+│── README.md                # Documentação principal
+│── docker-compose.yml       # Orquestração de containers
+│── .env                     # Variáveis de ambiente
+│
+├── services/                # Serviços (microserviços isolados)
+│   ├── auth/                # Autenticação e controle de sessões
+│   │   ├── app/
+│   │   │   ├── routers/
+│   │   │   ├── models/
+│   │   │   ├── schemas/
+│   │   │   ├── services/
+│   │   │   ├── utils/
+│   │   │   └── main.py
+│   │   └── tests/
+│   │
+│   ├── users/               # Gestão de usuários e perfis
+│   │   └── ...
+│   │
+│   ├── imobiliaria/         # Gestão de imobiliárias
+│   │   └── ...
+│   │
+│   ├── imoveis/             # Cadastro e mídia de imóveis
+│   │   └── ...
+│   │
+│   ├── crm/                 # Gestão de leads e pipeline
+│   │   ├── app/
+│   │   │   ├── routers/
+│   │   │   ├── models/
+│   │   │   ├── schemas/
+│   │   │   ├── services/
+│   │   │   └── main.py
+│   │   └── tests/
+│   │
+│   ├── analytics/           # Logs, métricas e dashboards
+│   │   └── ...
+│   │
+│   └── notifications/       # (Opcional) E-mail, SMS, Push
+│       └── ...
+│
+├── db/                      # Banco de dados
+│   ├── migrations/          # Scripts de versionamento
+│   ├── schema.sql           # Estrutura inicial do Star Schema
+│   └── seeds.sql            # Dados de exemplo
+│
+└── docs/                    # Documentação adicional
+    ├── business-rules.md    # Regras de negócio detalhadas
+    ├── api-docs.md          # Endpoints das APIs
+    └── erd.png              # Diagrama do banco
 ```
 
-2. Crie e ative o ambiente virtual:
+## 📊 Modelo de Dados (Star Schema)
 
+**Dimensões**:
+- dim_usuario → Usuários do sistema
+- dim_imobiliaria → Imobiliárias cadastradas
+- dim_imovel → Imóveis cadastrados
+- dim_lead → Leads no CRM
+- dim_midia_imovel → Fotos e vídeos dos imóveis
+- dim_sessao_usuario → Sessões ativas
+
+**Fatos**:
+- fact_log_usuario → Logs de ações de usuários
+- fact_pipeline_lead → Avanço de leads no funil
+- fact_agendamento_visita → Agendamentos de visitas
+- fact_tarefa_crm → Tarefas associadas a leads/usuários
+
+## 📜 Regras de Negócio
+
+**Autenticação & Sessão**
+- Apenas uma sessão ativa por usuário é permitida.
+- Tentativa de login em dispositivo diferente encerra sessão anterior.
+- Tokens JWT com refresh configurado.
+- Controle de Logs
+- Toda ação de CRUD gera um registro em fact_log_usuario.
+- Logs armazenam: usuário, ação, entidade afetada, timestamp, IP e user-agent.
+
+**CRM*
+- Leads devem estar vinculados a uma imobiliária e a um responsável (usuário).
+- Leads passam por estágios no pipeline: Novo → Contato → Proposta → Fechado (ganho/perdido).
+- Cada lead pode ter múltiplas tarefas e agendamentos.
+- Gestão de Imóveis
+- Imóvel precisa estar vinculado a uma imobiliária.
+- Cada imóvel pode ter múltiplas mídias (imagens/vídeos). 
+- Histórico de acessos e visitas registrado em tabelas de fato.
+
+**Dashboards & Analytics**
+- Baseados no Golden Layer, agregando métricas de leads, visitas, imóveis e conversões.
+- Possibilidade de exportação em CSV/PDF.
+
+## 🛠️ Como Rodar Localmente
 ```bash
-python -m venv env
-source env/bin/activate    # Linux/macOS
-env\Scripts\activate     # Windows
+# Clone o repositório
+git clone https://github.com/seu-usuario/lokar-web.git
+cd lokar-web
+
+# Suba os containers
+docker-compose up -d --build
+
+# Acesse o serviço principal
+http://localhost:8000/docs
 ```
 
-3. Instale as dependências:
-
-```bash
-pip install -r requirements.txt
-```
-
-4. Configure variáveis de ambiente (exemplo `.env`):
-
-```
-DATABASE_URL=postgresql://user:password@localhost:5432/lokar
-SECRET_KEY=uma_chave_secreta
-EMAIL_API_KEY=sua_chave_sendgrid
-```
-
----
-
-## 🚀 Executando o Backend
-
-```bash
-uvicorn app.main:app --reload
-```
-
-* O backend estará disponível em `http://localhost:8000`
-* Documentação interativa Swagger: `http://localhost:8000/docs`
-
----
-
-## 📦 Endpoints Principais
-
-| Endpoint      | Método              | Descrição                                    |
-| ------------- | ------------------- | -------------------------------------------- |
-| `/auth/login` | POST                | Login de usuário                             |
-| `/users/`     | GET/POST/PUT/DELETE | CRUD de usuários                             |
-| `/imoveis/`   | GET/POST/PUT/DELETE | CRUD de imóveis                              |
-| `/leads/`     | GET/POST            | Leads gerados pelo portal                    |
-| `/consent/`   | POST/GET            | Registro e verificação de consentimento LGPD |
-
----
-
-## 🔒 Consentimento LGPD
-
-* Leads do portal só aparecem no CRM do corretor **após consentimento**
-* Histórico de leads e consentimentos é mantido para auditoria
-* Emails e mensagens são enviados automaticamente usando tasks assíncronas
-
----
-
-## 🤝 Contribuição
-
-* Fork este repositório
-* Crie uma branch feature/nova-funcionalidade
-* Envie Pull Requests com descrição detalhada
-* Mantenha testes atualizados
-
----
-
-## 📜 Licença
-
-Este projeto está sob a licença MIT.
